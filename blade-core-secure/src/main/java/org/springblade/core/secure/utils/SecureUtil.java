@@ -267,6 +267,13 @@ public class SecureUtil {
 	 * @return tenantId
 	 */
 	public static String getTenantId() {
+		HttpServletRequest request = WebUtil.getRequest();
+		if (request != null) {
+			String tenantId = request.getHeader("Tenant-Id");
+			if (StringUtil.isNotBlank(tenantId)) {
+				return tenantId;
+			}
+		}
 		BladeUser user = getUser();
 		return (null == user) ? StringPool.EMPTY : user.getTenantId();
 	}
@@ -278,6 +285,12 @@ public class SecureUtil {
 	 * @return tenantId
 	 */
 	public static String getTenantId(HttpServletRequest request) {
+		if (request != null) {
+			String tenantId = request.getHeader("Tenant-Id");
+			if (StringUtil.isNotBlank(tenantId)) {
+				return tenantId;
+			}
+		}
 		BladeUser user = getUser(request);
 		return (null == user) ? StringPool.EMPTY : user.getTenantId();
 	}
