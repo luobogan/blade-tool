@@ -1,0 +1,5 @@
+org.springblade.core.redis.config.RedisTemplateConfiguration
+org.springblade.core.redis.config.RedisPubSubConfiguration
+org.springblade.core.redis.config.RedisCacheManagerConfig
+org.springblade.core.redis.config.ProtoStuffSerializerConfiguration
+org.springblade.core.redis.config.BladeRedisCacheAutoConfiguration

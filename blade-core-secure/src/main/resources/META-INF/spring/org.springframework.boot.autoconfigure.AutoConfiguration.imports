@@ -1,0 +1,2 @@
+org.springblade.core.secure.config.SecureConfiguration
+org.springblade.core.secure.config.RegistryConfiguration

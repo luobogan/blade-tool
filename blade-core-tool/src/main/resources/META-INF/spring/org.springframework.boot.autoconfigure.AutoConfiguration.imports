@@ -1,0 +1,5 @@
+org.springblade.core.tool.config.ToolConfiguration
+org.springblade.core.tool.config.RequestConfiguration
+org.springblade.core.tool.config.RedisConfiguration
+org.springblade.core.tool.config.MessageConfiguration
+org.springblade.core.tool.config.JacksonConfiguration

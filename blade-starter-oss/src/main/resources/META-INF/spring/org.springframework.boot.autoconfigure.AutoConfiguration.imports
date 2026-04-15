@@ -1,0 +1,5 @@
+org.springblade.core.oss.config.TencentCosConfiguration
+org.springblade.core.oss.config.QiniuConfiguration
+org.springblade.core.oss.config.OssConfiguration
+org.springblade.core.oss.config.MinioConfiguration
+org.springblade.core.oss.config.AliossConfiguration

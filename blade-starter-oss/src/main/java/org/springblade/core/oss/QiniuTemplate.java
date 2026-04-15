@@ -78,7 +78,6 @@ public class QiniuTemplate implements OssTemplate {
 	}
 
 	@Override
-	@SneakyThrows
 	public void removeBucket(String bucketName) {
 
 	}

@@ -1,0 +1,4 @@
+org.springblade.core.cloud.version.VersionMappingAutoConfiguration
+org.springblade.core.cloud.config.BladeCloudAutoConfiguration
+org.springblade.core.cloud.http.RestTemplateConfiguration
+org.springblade.core.cloud.http.BladeHttpConfiguration

@@ -1,0 +1,3 @@
+org.springblade.core.log.error.BladeRestExceptionTranslator
+org.springblade.core.log.config.BladeLogToolAutoConfiguration
+org.springblade.core.log.config.BladeErrorMvcAutoConfiguration

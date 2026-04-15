@@ -17,11 +17,10 @@ package org.springblade.core.tenant.config;
 
 import com.baomidou.mybatisplus.extension.plugins.handler.TenantLineHandler;
 import com.baomidou.mybatisplus.extension.plugins.inner.TenantLineInnerInterceptor;
-import lombok.AllArgsConstructor;
-import org.springblade.core.mp.config.MybatisPlusConfiguration;
+import org.apache.ibatis.session.SqlSessionFactory;
 import org.springblade.core.tenant.*;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.AutoConfigureBefore;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -33,13 +32,11 @@ import org.springframework.context.annotation.Primary;
  * @author Chill
  */
 @AutoConfiguration
-@AllArgsConstructor
-@AutoConfigureBefore(MybatisPlusConfiguration.class)
 @EnableConfigurationProperties(BladeTenantProperties.class)
 public class TenantConfiguration {
 
 	/**
-	 * 自定义多租户处理器
+	 * 自定义多租户处理器（无 SqlSessionFactory 依赖，避免循环依赖）
 	 *
 	 * @param tenantProperties 多租户配置类
 	 * @return TenantHandler
@@ -62,6 +59,16 @@ public class TenantConfiguration {
 		BladeTenantInterceptor tenantInterceptor = new BladeTenantInterceptor();
 		tenantInterceptor.setTenantLineHandler(tenantHandler);
 		return tenantInterceptor;
+	}
+
+	/**
+	 * 租户表预扫描器：在 SqlSessionFactory 创建完毕后，预热所有 Mapper 的 TableInfo，
+	 * 使 BladeTenantHandler 能在首次 SQL 前识别所有 TenantEntity 子类表。
+	 */
+	@Bean
+	@ConditionalOnBean(SqlSessionFactory.class)
+	public BladeTenantTableScanner bladeTenantTableScanner(SqlSessionFactory sqlSessionFactory) {
+		return new BladeTenantTableScanner(sqlSessionFactory);
 	}
 
 	/**
