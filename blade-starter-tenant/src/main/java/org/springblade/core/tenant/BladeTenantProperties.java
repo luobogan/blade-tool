@@ -52,4 +52,9 @@ public class BladeTenantProperties {
 	 * 多租户系统数据表
 	 */
 	private List<String> bladeTables = Arrays.asList("blade_notice", "blade_post", "blade_log_api", "blade_log_error", "blade_log_usual");
+
+	/**
+	 * 排除多租户的数据表（这些表虽然实体继承 TenantEntity，但实际是全局共享的）
+	 */
+	private List<String> excludeTables = new ArrayList<>();
 }

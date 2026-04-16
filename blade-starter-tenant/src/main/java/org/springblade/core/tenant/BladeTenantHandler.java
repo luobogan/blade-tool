@@ -83,6 +83,12 @@ public class BladeTenantHandler implements TenantLineHandler {
 
 		String lowerName = tableName.toLowerCase();
 
+		// 0. 排除表（最高优先级 — 全局共享表，不参与租户过滤）
+		if (!properties.getExcludeTables().isEmpty() && properties.getExcludeTables().contains(lowerName)) {
+			log.info("[BladeTenant#{}] → EXCLUDED (global shared table): {}", logCounter, tableName);
+			return true;
+		}
+
 		// 1. 手动配置检查
 		boolean manualMatch = (!properties.getTables().isEmpty() && properties.getTables().contains(lowerName))
 			|| properties.getBladeTables().contains(lowerName);
