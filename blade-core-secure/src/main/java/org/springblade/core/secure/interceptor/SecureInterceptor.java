@@ -49,7 +49,7 @@ public class SecureInterceptor implements AsyncHandlerInterceptor {
 			R result = R.fail(ResultCode.UN_AUTHORIZED);
 			response.setCharacterEncoding(BladeConstant.UTF_8);
 			response.setHeader(BladeConstant.CONTENT_TYPE_NAME, MediaType.APPLICATION_JSON_VALUE);
-			response.setStatus(HttpServletResponse.SC_OK);
+			response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
 			try {
 				response.getWriter().write(Objects.requireNonNull(JsonUtil.toJson(result)));
 			} catch (IOException ex) {
