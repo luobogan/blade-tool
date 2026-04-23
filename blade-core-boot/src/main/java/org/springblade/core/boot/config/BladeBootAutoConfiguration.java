@@ -56,7 +56,8 @@ public class BladeBootAutoConfiguration {
 		me.setDomain(bladeProperties.get("upload-domain", "http://localhost:8888"));
 
 		//设定文件上传是否为远程模式
-		me.setRemoteMode(bladeProperties.getBoolean("remote-mode", Boolean.TRUE).booleanValue());
+		Boolean remoteMode = bladeProperties.getBoolean("remote-mode", Boolean.TRUE);
+		me.setRemoteMode(remoteMode != null ? remoteMode : Boolean.TRUE);
 
 		//远程上传地址
 		me.setRemotePath(bladeProperties.get("remote-path", System.getProperty("user.dir") + "/work/blade"));
@@ -68,13 +69,15 @@ public class BladeBootAutoConfiguration {
 		me.setDownloadPath(bladeProperties.get("download-path", "/download"));
 
 		//设定上传图片是否压缩
-		me.setCompress(bladeProperties.getBoolean("compress", Boolean.FALSE).booleanValue());
+		Boolean compress = bladeProperties.getBoolean("compress", Boolean.FALSE);
+		me.setCompress(compress != null ? compress : Boolean.FALSE);
 
 		//设定上传图片压缩比例
 		me.setCompressScale(bladeProperties.getDouble("compress-scale", 2.00));
 
 		//设定上传图片缩放选择:true 放大;false 缩小
-		me.setCompressFlag(bladeProperties.getBoolean("compress-flag", Boolean.FALSE).booleanValue());
+		Boolean compressFlag = bladeProperties.getBoolean("compress-flag", Boolean.FALSE);
+		me.setCompressFlag(compressFlag != null ? compressFlag : Boolean.FALSE);
 
 		return me;
 	}
