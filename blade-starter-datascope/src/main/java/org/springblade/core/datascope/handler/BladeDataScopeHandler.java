@@ -41,8 +41,10 @@ public class BladeDataScopeHandler implements DataScopeHandler {
 
 	@Override
 	public String sqlCondition(String mapperId, DataScopeModel dataScope, BladeUser bladeUser, String originalSql) {
+		// if (dataScope == null || bladeUser == null) {
+		// 	return null;
+		// }
 
-		//数据权限资源编号
 		String code = dataScope.getResourceCode();
 
 		//根据mapperId从数据库中获取对应模型

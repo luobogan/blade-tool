@@ -23,6 +23,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
+import org.springframework.scheduling.annotation.EnableAsync;
 
 /**
  * 配置类
@@ -35,6 +36,7 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
 	BladeProperties.class
 })
 @EnableAspectJAutoProxy(proxyTargetClass = true, exposeProxy = true)
+@EnableAsync
 @AllArgsConstructor
 public class BladeBootAutoConfiguration {
 
