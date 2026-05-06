@@ -72,14 +72,25 @@ public class TenantConfiguration {
 	}
 
 	/**
-	 * 自定义租户id生成器
-	 *
-	 * @return TenantId
-	 */
-	@Bean
-	@ConditionalOnMissingBean(TenantId.class)
-	public TenantId tenantId() {
-		return new BladeTenantId();
-	}
+ * 自定义租户id生成器
+ *
+ * @return TenantId
+ */
+@Bean
+@ConditionalOnMissingBean(TenantId.class)
+public TenantId tenantId() {
+	return new BladeTenantId();
+}
+
+/**
+ * 管理员租户切面
+ * 000000租户访问标注 @AdminTenant 的方法时，不进行租户隔离
+ *
+ * @return AdminTenantAspect
+ */
+@Bean
+public org.springblade.core.tenant.aspect.AdminTenantAspect adminTenantAspect() {
+	return new org.springblade.core.tenant.aspect.AdminTenantAspect();
+}
 
 }
