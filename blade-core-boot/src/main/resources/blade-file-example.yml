@@ -1,0 +1,24 @@
+# =============================================
+# Blade File Upload Configuration
+# 文件上传统一配置（所有类型统一）
+# =============================================
+
+blade:
+  file:
+    # 是否启用增强功能（加密、压缩、数据库存储）
+    enabled: true
+
+    # 统一上传目录（所有类型的文件都存到这里）
+    upload-dir: upload
+
+    # 是否ZIP压缩（true=所有上传的文件都会压缩成zip格式）
+    zip-enabled: true
+
+    # 是否AES加密（true=所有上传的文件都会AES加密）
+    encrypt-enabled: true
+
+    # 是否保存到ImageFile数据库表（true=所有文件元数据存入ImageFile表）
+    save-to-db: true
+
+    # 图片尺寸压缩（仅对图片生效，减小图片分辨率/质量）
+    image-compress: true

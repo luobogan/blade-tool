@@ -1,0 +1,30 @@
+-- 附件文件表（ImageFile）
+-- 用于存储上传文件的元数据信息
+CREATE TABLE IF NOT EXISTS `ImageFile` (
+    `imagefileid` BIGINT(20) NOT NULL COMMENT '文件ID（主键）',
+    `imagefilename` VARCHAR(255) DEFAULT '' COMMENT '原始文件名',
+    `imagefiletype` VARCHAR(100) DEFAULT '' COMMENT '文件类型(MIME类型)',
+    `imagefileused` INT(11) DEFAULT 1 COMMENT '是否使用(1=使用)',
+    `filerealpath` VARCHAR(1000) DEFAULT '' COMMENT '文件真实存储路径',
+    `iszip` INT(11) DEFAULT 0 COMMENT '是否ZIP压缩(0/1)',
+    `isencrypt` INT(11) DEFAULT 0 COMMENT '是否加密-基本不使用(0/1)',
+    `filesize` BIGINT(20) DEFAULT 0 COMMENT '文件大小(字节)',
+    `downloads` INT(11) DEFAULT 0 COMMENT '下载次数',
+    `miniimgpath` VARCHAR(500) DEFAULT '' COMMENT '缩略图路径',
+    `imgsize` VARCHAR(50) DEFAULT '' COMMENT '缩略图尺寸',
+    `isftp` CHAR(1) DEFAULT '0' COMMENT '是否FTP存储',
+    `ftpconfigid` INT(11) DEFAULT 0 COMMENT 'FTP配置ID',
+    `isaesencrypt` INT(11) DEFAULT 0 COMMENT '是否AES加密(0/1)',
+    `aescode` VARCHAR(64) DEFAULT '' COMMENT 'AES加密密钥',
+    `tokenkey` VARCHAR(200) DEFAULT '' COMMENT 'OSS Token',
+    `storagestatus` VARCHAR(30) DEFAULT '' COMMENT '传输状态',
+    `comefrom` VARCHAR(100) DEFAULT '' COMMENT '附件来源',
+    `secretlevel` INT(11) DEFAULT 4 COMMENT '密级(4=公开)',
+    `secretvalidity` VARCHAR(50) DEFAULT '' COMMENT '保密期限',
+    `createdat` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updatedat` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`imagefileid`),
+    INDEX `idx_imagefilename` (`imagefilename`),
+    INDEX `idx_isaesencrypt` (`isaesencrypt`),
+    INDEX `idx_createdat` (`createdat`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='附件文件表';

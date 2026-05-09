@@ -1,18 +1,3 @@
-/**
- * Copyright (c) 2018-2099, Chill Zhuang 庄骞 (bladejava@qq.com).
- * <p>
- * Licensed under the GNU LESSER GENERAL PUBLIC LICENSE 3.0;
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * <p>
- * http://www.gnu.org/licenses/lgpl.html
- * <p>
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package org.springblade.core.boot.file;
 
 import org.springblade.core.tool.constant.SystemConstant;
@@ -21,59 +6,110 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Calendar;
 import java.util.Date;
+import java.util.Random;
+import java.util.UUID;
 
-/**
- * 上传文件封装
- * @author Chill
- */
 public class BladeFile {
-	/**
-	 * 上传文件在附件表中的id
-	 */
+
+	private static BladeFileProperties properties;
+	private static final Random RANDOM = new Random();
+
+	public static void setProperties(BladeFileProperties props) {
+		properties = props;
+	}
+
 	private Object fileId;
 
-	/**
-	 * 上传文件
-	 */
+	private ImageFileEntity fileEntity;
+
 	private MultipartFile file;
 
-	/**
-	 * 上传分类文件夹
-	 */
 	private String dir;
 
-	/**
-	 * 上传物理路径
-	 */
 	private String uploadPath;
 
-	/**
-	 * 上传虚拟路径
-	 */
 	private String uploadVirtualPath;
 
-	/**
-	 * 文件名
-	 */
 	private String fileName;
 
-	/**
-	 * 真实文件名
-	 */
 	private String originalFileName;
 
-	public BladeFile() {
+	private String fileExt;
 
+	/**
+	 * 租户ID
+	 */
+	private String tenantId;
+
+	private Boolean needZip = null;
+
+	private Boolean needEncrypt = null;
+
+	private Boolean saveToDb = null;
+
+	private String aesCode;
+
+	private Boolean imageCompress = null;
+
+	public BladeFile() {
 	}
 
 	public BladeFile(MultipartFile file, String dir) {
 		this.dir = dir;
 		this.file = file;
-		this.fileName = file.getName();
 		this.originalFileName = file.getOriginalFilename();
-		this.uploadPath = BladeFileUtil.formatUrl(File.separator + SystemConstant.me().getUploadRealPath() + File.separator + dir + File.separator + DateUtil.format(new Date(), "yyyyMMdd") + File.separator + this.originalFileName);
-		this.uploadVirtualPath = BladeFileUtil.formatUrl(SystemConstant.me().getUploadCtxPath().replace(SystemConstant.me().getContextPath(), "") + File.separator + dir + File.separator + DateUtil.format(new Date(), "yyyyMMdd") + File.separator + this.originalFileName);
+
+		String uuid = UUID.randomUUID().toString();
+		this.fileExt = getFileExt(this.originalFileName);
+		this.fileName = uuid;
+
+		String dateDir = getDateDir();
+		String randomChar = getRandomChar();
+
+		StringBuilder pathBuilder = new StringBuilder();
+		pathBuilder.append(File.separator).append(SystemConstant.me().getUploadRealPath());
+		if (this.tenantId != null && !this.tenantId.isEmpty()) {
+			pathBuilder.append(File.separator).append(this.tenantId);
+		}
+		pathBuilder.append(File.separator).append(dir)
+			.append(File.separator).append(dateDir)
+			.append(File.separator).append(randomChar)
+			.append(File.separator).append(this.fileName).append(this.fileExt);
+
+		StringBuilder virtualPathBuilder = new StringBuilder();
+		virtualPathBuilder.append(SystemConstant.me().getUploadCtxPath().replace(SystemConstant.me().getContextPath(), ""));
+		if (this.tenantId != null && !this.tenantId.isEmpty()) {
+			virtualPathBuilder.append(File.separator).append(this.tenantId);
+		}
+		virtualPathBuilder.append(File.separator).append(dir)
+			.append(File.separator).append(dateDir)
+			.append(File.separator).append(randomChar)
+			.append(File.separator).append(this.fileName).append(this.fileExt);
+
+		this.uploadPath = BladeFileUtil.formatUrl(pathBuilder.toString());
+		this.uploadVirtualPath = BladeFileUtil.formatUrl(virtualPathBuilder.toString());
+		initFromConfig();
+	}
+
+	private String getFileExt(String fileName) {
+		if (fileName == null || !fileName.contains(".")) {
+			return ".jpg";
+		}
+		return fileName.substring(fileName.lastIndexOf("."));
+	}
+
+	private String getDateDir() {
+		Calendar today = Calendar.getInstance();
+		String currentYear = String.format("%04d", today.get(Calendar.YEAR));
+		String currentMonth = String.format("%02d", today.get(Calendar.MONTH) + 1);
+		return currentYear + currentMonth;
+	}
+
+	private String getRandomChar() {
+		int randomInt = 1 + RANDOM.nextInt(26);
+		return String.valueOf((char) ('A' + randomInt - 1));
 	}
 
 	public BladeFile(MultipartFile file, String dir, String uploadPath, String uploadVirtualPath) {
@@ -84,46 +120,79 @@ public class BladeFile {
 		}
 	}
 
-	/**
-	 * 图片上传
-	 */
-	public void transfer() {
-		transfer(SystemConstant.me().isCompress());
+	private void initFromConfig() {
+		if (properties != null && properties.isEnabled()) {
+			if (this.needZip == null) {
+				this.needZip = properties.isZipEnabled();
+			}
+			if (this.needEncrypt == null) {
+				this.needEncrypt = properties.isEncryptEnabled();
+			}
+			if (this.saveToDb == null) {
+				this.saveToDb = properties.isSaveToDb();
+			}
+			if (this.imageCompress == null) {
+				this.imageCompress = properties.isImageCompress();
+			}
+		} else {
+			if (this.needZip == null) this.needZip = false;
+			if (this.needEncrypt == null) this.needEncrypt = false;
+			if (this.saveToDb == null) this.saveToDb = false;
+			if (this.imageCompress == null) this.imageCompress = true;
+		}
 	}
 
-	/**
-	 * 图片上传
-	 *
-	 * @param compress 是否压缩
-	 */
+	public BladeFile setNeedZip(boolean needZip) {
+		this.needZip = needZip;
+		return this;
+	}
+
+	public BladeFile setNeedEncrypt(boolean needEncrypt) {
+		this.needEncrypt = needEncrypt;
+		return this;
+	}
+
+	public BladeFile setSaveToDb(boolean saveToDb) {
+		this.saveToDb = saveToDb;
+		return this;
+	}
+
+	public BladeFile setImageCompress(boolean compress) {
+		this.imageCompress = compress;
+		return this;
+	}
+
+	public BladeFile setTenantId(String tenantId) {
+		this.tenantId = tenantId;
+		return this;
+	}
+
+	public void transfer() {
+		transfer(getEffectiveImageCompress());
+	}
+
 	public void transfer(boolean compress) {
 		IFileProxy fileFactory = FileProxyManager.me().getDefaultFileProxyFactory();
-		this.transfer(fileFactory, compress);
+		transfer(fileFactory, compress);
 	}
 
-	/**
-	 * 图片上传
-	 *
-	 * @param fileFactory 文件上传工厂类
-	 * @param compress    是否压缩
-	 */
 	public void transfer(IFileProxy fileFactory, boolean compress) {
 		try {
-			File file = new File(uploadPath);
+			File f = new File(uploadPath);
 
 			if (null != fileFactory) {
-				String[] path = fileFactory.path(file, dir);
+				String[] path = fileFactory.path(f, dir, this.tenantId);
 				this.uploadPath = path[0];
 				this.uploadVirtualPath = path[1];
-				file = fileFactory.rename(file, path[0]);
+				f = fileFactory.rename(f, path[0]);
 			}
 
-			File pfile = file.getParentFile();
+			File pfile = f.getParentFile();
 			if (!pfile.exists()) {
 				pfile.mkdirs();
 			}
 
-			this.file.transferTo(file);
+			this.file.transferTo(f);
 
 			if (compress) {
 				fileFactory.compress(this.uploadPath);
@@ -132,6 +201,92 @@ public class BladeFile {
 		} catch (IllegalStateException | IOException e) {
 			e.printStackTrace();
 		}
+	}
+
+	public BladeFileProxyFactory.UploadResult transferEnhanced() {
+		boolean compress = getEffectiveImageCompress();
+		boolean zip = getEffectiveNeedZip();
+		boolean encrypt = getEffectiveNeedEncrypt();
+
+		long fileSize = this.file.getSize();
+		String contentType = this.file.getContentType();
+
+		IFileProxy fileFactory = FileProxyManager.me().getDefaultFileProxyFactory();
+
+		try {
+			File f = new File(uploadPath);
+
+			if (null != fileFactory) {
+				String[] path = fileFactory.path(f, dir, this.tenantId);
+				this.uploadPath = path[0];
+				this.uploadVirtualPath = path[1];
+				f = new File(this.uploadPath);
+			}
+
+			File pfile = f.getParentFile();
+			if (!pfile.exists()) {
+				pfile.mkdirs();
+			}
+
+			this.file.transferTo(f);
+
+			if (compress && isImageFile()) {
+				fileFactory.compress(this.uploadPath);
+			}
+
+			if (fileFactory instanceof BladeFileProxyFactory) {
+				BladeFileProxyFactory.UploadResult result = ((BladeFileProxyFactory) fileFactory).processFile(
+					this.uploadPath,
+					this.fileExt,
+					this.originalFileName,
+					contentType,
+					fileSize,
+					zip,
+					encrypt,
+					this.tenantId
+				);
+
+				if (result.getFilePath() != null) {
+					this.uploadPath = result.getFilePath();
+				}
+				if (result.getEntity() != null) {
+					this.fileEntity = result.getEntity();
+				}
+				if (result.getFileId() != null) {
+					this.fileId = result.getFileId();
+				}
+				if (result.getAesCode() != null) {
+					this.aesCode = result.getAesCode();
+				}
+
+				return result;
+			}
+
+		} catch (IllegalStateException | IOException e) {
+			e.printStackTrace();
+		}
+
+		return null;
+	}
+
+	private boolean getEffectiveImageCompress() {
+		return imageCompress != null ? imageCompress :
+			(properties != null ? properties.isImageCompress() : true);
+	}
+
+	private boolean getEffectiveNeedZip() {
+		return needZip != null ? needZip :
+			(properties != null ? properties.isZipEnabled() : false);
+	}
+
+	private boolean getEffectiveNeedEncrypt() {
+		return needEncrypt != null ? needEncrypt :
+			(properties != null ? properties.isEncryptEnabled() : false);
+	}
+
+	private boolean isImageFile() {
+		String contentType = file.getContentType();
+		return contentType != null && contentType.startsWith("image/");
 	}
 
 	public MultipartFile getFile() {
@@ -166,12 +321,52 @@ public class BladeFile {
 		this.fileName = fileName;
 	}
 
+	public String getFileExt() {
+		return fileExt;
+	}
+
 	public String getOriginalFileName() {
 		return originalFileName;
 	}
 
 	public void setOriginalFileName(String originalFileName) {
 		this.originalFileName = originalFileName;
+	}
+
+	public Object getFileId() {
+		return fileId;
+	}
+
+	public ImageFileEntity getFileEntity() {
+		return fileEntity;
+	}
+
+	public String getAesCode() {
+		return aesCode;
+	}
+
+	public Boolean isNeedZip() {
+		return needZip;
+	}
+
+	public Boolean isNeedEncrypt() {
+		return needEncrypt;
+	}
+
+	public Boolean isSaveToDb() {
+		return saveToDb;
+	}
+
+	public Boolean getImageCompress() {
+		return imageCompress;
+	}
+
+	public String getDir() {
+		return dir;
+	}
+
+	public String getTenantId() {
+		return tenantId;
 	}
 
 }

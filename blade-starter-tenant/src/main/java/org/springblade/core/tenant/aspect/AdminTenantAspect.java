@@ -19,12 +19,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
-import org.springblade.core.secure.utils.AuthUtil;
+import org.springblade.core.tenant.AdminTenantUtil;
 import org.springblade.core.tenant.TenantUtil;
 
 /**
  * 管理员租户切面
- * 000000租户访问标注 @AdminTenant 的方法时，不进行租户隔离
+ * 租户ID为000000且角色包含admin的用户访问标注 @AdminTenant 的方法时，不进行租户隔离
  *
  * @author BladeX
  */
@@ -32,19 +32,12 @@ import org.springblade.core.tenant.TenantUtil;
 @Aspect
 public class AdminTenantAspect {
 
-	/**
-	 * 管理员租户ID
-	 */
-	private static final String ADMIN_TENANT_ID = "000000";
-
 	@Around("@annotation(org.springblade.core.tenant.annotation.AdminTenant)")
 	public Object around(ProceedingJoinPoint point) throws Throwable {
-		String tenantId = AuthUtil.getTenantId();
-		log.debug("AdminTenantAspect - 当前租户ID: {}", tenantId);
+		log.debug("AdminTenantAspect - 是否为超级管理员: {}", AdminTenantUtil.isSuperAdmin());
 
-		if (ADMIN_TENANT_ID.equals(tenantId)) {
-			// 000000租户忽略租户隔离
-			log.debug("AdminTenantAspect - 管理员租户，忽略租户隔离");
+		if (AdminTenantUtil.isSuperAdmin()) {
+			log.debug("AdminTenantAspect - 超级管理员，忽略租户隔离");
 			return TenantUtil.ignore(() -> {
 				try {
 					return point.proceed();
@@ -53,7 +46,6 @@ public class AdminTenantAspect {
 				}
 			});
 		}
-		// 普通租户正常执行
 		return point.proceed();
 	}
 

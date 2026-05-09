@@ -75,6 +75,12 @@ public class BladeTenantHandler implements TenantLineHandler {
 			return true;
 		}
 
+		// 超级管理员（租户000000且角色包含admin）忽略租户隔离
+		if (AdminTenantUtil.isSuperAdmin()) {
+			if (verbose) log.info("[BladeTenant#{}] → IGNORED: Super admin detected", logCounter);
+			return true;
+		}
+
 		String tenantId = TenantUtil.getTenantId();
 		if (StringUtil.isBlank(tenantId)) {
 			if (verbose) log.info("[BladeTenant#{}] → IGNORED: tenantId is blank/null! (value='{}')", logCounter, tenantId);
