@@ -348,7 +348,7 @@ public class JacksonConfiguration {
 
 > ⚠️【务必看清,这是升级中最隐蔽的一个坑】Spring 7 的 `WebMvcConfigurationSupport.getMessageConverters()` 执行顺序是:先 `configureMessageConverters(list)` → 若 list 仍为空才 `addDefaultHttpMessageConverters(list)`(这一步才注册 ByteArray/String/Resource/ResourceRegion/Form 以及 JSON 转换器)→ 最后 `extendMessageConverters(list)`。
 > 若重写 `configureMessageConverters` 并向 list 添加任何转换器,list 变为非空,`addDefaultHttpMessageConverters` 会被**整段跳过**,MVC 最终只剩下你加入的这一个转换器——文件下载、`byte[]`/图片/PDF、纯文本、表单请求体全部 406/`HttpMessageNotWritableException` 失败。**编译与纯 JSON 接口都正常,极难在冒烟测试中发现。**
-> 正解是重写 `extendMessageConverters`:它在默认列表构建完成之后回调,拿到的是**完整**的默认转换器,再原地替换 JSON(因 §5.5⑤ 已强制 `preferred-json-mapper=jackson2`,默认 JSON 转换器为 `MappingJackson2HttpMessageConverter`,属 `AbstractJackson2HttpMessageConverter`)与 String 转换器即可,其余转换器原样保留。
+> 正解是重写 `extendMessageConverters`:它在默认列表构建完成之后回调,拿到的是**完整**的默认转换器,再原地替换 JSON(因 §5.5⑤ 已在托管层剥离 Jackson 3,默认 JSON 转换器为 `MappingJackson2HttpMessageConverter`,属 `AbstractJackson2HttpMessageConverter`)与 String 转换器即可,其余转换器原样保留。
 
 ```java
 @Override
@@ -387,7 +387,28 @@ public void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
 
 > 与 Jackson 无关的 `org.springframework.lang.Nullable/NonNull` 在 Spring 7 也被弃用(官方推 JSpecify),那是一处独立、面广的迁移,不在本表范围,别混入 Jackson 的 `@SuppressWarnings`。
 
-**⑤ 【关键】强制 preferred-json-mapper = jackson2**——新增一个 `LauncherService`,否则 Boot 4 默认注册 Jackson 3 转换器,§5.5③ 的 `instanceof AbstractJackson2HttpMessageConverter` 命不中,Blade 的 JSON 处理静默失效:
+**⑤ 【关键】让 Boot 4 选中 Jackson 2**——Boot 的择一逻辑写在 `org.springframework.boot.http.converter.autoconfigure` 下,读源码可见是**两条并列通路,满足其一即可**(`Jackson2HttpMessageConvertersConfiguration.PreferJackson2OrJacksonUnavailableCondition` 是 `AnyNestedCondition`):
+
+```java
+// Jackson 3 分支——三个条件同时成立才注册(javap 实测 JacksonJsonHttpMessageConverterConfiguration)
+@ConditionalOnClass(tools.jackson.databind.json.JsonMapper.class)
+@ConditionalOnBean(tools.jackson.databind.json.JsonMapper.class)     // ← 关键:要 Bean,不只是类
+@ConditionalOnProperty(name = "spring.http.converters.preferred-json-mapper",
+                       havingValue = "jackson", matchIfMissing = true)
+
+// Jackson 2 分支——以下任一命中即生效
+@ConditionalOnProperty(name = "...preferred-json-mapper", havingValue = "jackson2")  // 通路 A
+@ConditionalOnMissingBean(JacksonJsonHttpMessageConvertersCustomizer.class)          // 通路 B
+```
+
+- **通路 B(主)**:Jackson 3 分支要的是**容器里有 `JsonMapper` Bean**,而该 Bean 只由 `spring-boot-jackson` 自动配置模块产出;托管层已把该模块摘掉(见 §5.5⑥),Bean 不存在 → Jackson 3 分支不命中 → Jackson 2 分支的 `@ConditionalOnMissingBean` 成立。这是**编译期事实**,不依赖启动路径。
+- **通路 A(兜底)**:`LauncherService` 设 `preferred-json-mapper=jackson2`,覆盖下游未继承 blade 托管层、`spring-boot-jackson` 漏进 classpath 的场景。
+
+> ⚠️ 别把「剥离 Jackson 3」理解成「classpath 上不能有 `tools.jackson`」——**决定管线的是 `JsonMapper` Bean 在不在,不是 Jackson 3 的类在不在**。Jackson 3 的库照常引入不会翻转管线,反而是必需的,理由见 §5.5⑧。
+
+> 两条都留的原因:通路 A 仅在 `BladeApplication` 启动路径执行,`@SpringBootTest`、blade-gateway(不含 blade-core-tool)覆盖不到;且 Jackson 3 的 **XML 转换器分支**(`JacksonXmlHttpMessageConverterConfiguration`)只有 `@ConditionalOnClass` + `@ConditionalOnBean`,**不受 `preferred-json-mapper` 约束**,属性通路结构性覆盖不到。
+>
+> 关于失效程度需说清:因 §5.5③ 的 `if (!jsonReplaced) converters.add(0, bladeJson)` 兜底,即使两条通路全漏、Jackson 3 转换器占位,blade 转换器仍会插到队首优先命中,**MVC 服务端不会失效**;真正会静默回落到 Jackson 3 的是 `RestClient`/`RestTemplate` 客户端转换器与 WebFlux 编解码器。
 
 新增 `blade-core-tool/.../config/JacksonLauncherServiceImpl.java`:
 
@@ -407,6 +428,92 @@ public class JacksonLauncherServiceImpl implements LauncherService {
     }
 }
 ```
+
+**⑥ 【主通路】托管层剥离 Jackson 3 的自动配置模块(只剥模块,不剥库)**——在父 POM `dependencyManagement` 把 `spring-boot-jackson` 从传递链上摘掉,容器里便不会出现 `JsonMapper` Bean,§5.5⑤ 的通路 B 恒成立。**剥离对象仅限这个自动配置模块,`tools.jackson` 系的库本体照常引入**(理由见 §5.5⑧)。**需要两个条目,缺一不可**:
+
+```xml
+<!-- 主路径:webmvc、restclient 等多个 starter 都经由 starter-jackson 传递 -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-jackson</artifactId>
+    <version>${spring.boot.version}</version>
+    <exclusions>
+        <exclusion>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-jackson</artifactId>
+        </exclusion>
+    </exclusions>
+</dependency>
+<!-- springdoc 走的是另一条路,webflux-ui / webmvc-ui 两个坐标都要单独排 -->
+<dependency>
+    <groupId>org.springdoc</groupId>
+    <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+    <version>3.0.3</version>
+    <exclusions>
+        <exclusion>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-jackson</artifactId>
+        </exclusion>
+    </exclusions>
+</dependency>
+```
+
+> ⚠️ 为什么 springdoc 必须单独排:`springdoc-openapi-starter-common:3.0.3` **直接依赖** `org.springframework.boot:spring-boot-jackson`,而不是经 `spring-boot-starter-jackson` 传递,上面第一个条目的 `<exclusions>` 只约束它自己的子树,管不到 springdoc。可用 `mvn dependency:tree` 单独验证(注意:在完整工程里跑,Maven 的 nearest-wins 会把 springdoc 分支下的重复节点省略,须用只含 springdoc 的最小 POM 或加 `-Dverbose` 才看得见)。
+>
+> springdoc 内部仅 Spring Data REST 支持类引用 Jackson 3,且被 `@ConditionalOnClass(RepositoryRestConfiguration)` 守卫,排除无副作用。
+>
+> 子模块**不需要**再写一遍局部 `<exclusions>`:子模块继承父 `dependencyManagement`,下游工程经 `blade-core-bom` 展开同样继承,重复声明纯属冗余。
+
+**⑦ 序列化管线门禁**——托管层排除是"当前依赖树"的快照,第三方库升级随时可能开出新的引入路径(springdoc 直连就是活例)。父 POM `<build><plugins>` 挂一条 enforcer 规则,把漏排从**运行期静默回落**提前成**构建期失败**,并顺带校验托管层排除是否随 `blade-core-bom` 正确传导:
+
+```xml
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-enforcer-plugin</artifactId>
+    <version>${maven.enforcer.version}</version>
+    <executions>
+        <execution>
+            <id>ban-jackson3-autoconfigure</id>
+            <goals><goal>enforce</goal></goals>
+            <configuration>
+                <rules>
+                    <bannedDependencies>
+                        <excludes>
+                            <exclude>org.springframework.boot:spring-boot-jackson</exclude>
+                            <exclude>org.springframework.boot:spring-boot-jackson-test</exclude>
+                        </excludes>
+                    </bannedDependencies>
+                </rules>
+            </configuration>
+        </execution>
+    </executions>
+</plugin>
+```
+
+> **封禁对象只有自动配置模块**,`tools.jackson` 系构件不在范围内——门禁守的是"`JsonMapper` Bean 不许出现",不是"Jackson 3 的类不许出现";把库一起禁掉会连带打死一批按「Jackson 3 在场」编写的第三方组件(见 §5.5⑧)。`spring-boot-jackson` / `spring-boot-jackson-test` 均为精确坐标匹配,**不会**误伤 `spring-boot-jackson2`。
+>
+> 该门禁 Boot 单体 / Cloud 微服务两个下游工程需各自挂一份——它们以 Boot BOM import 方式引用 blade-tool,并非以其为 parent,`<build><plugins>` 不会继承过去。
+
+**⑧ 【必读】Jackson 3 的库本体必须留着(Cloud 侧尤其)**——⑥ 只剥自动配置模块,而 `tools.jackson` 的库是随该模块传递进来的,剥掉模块库也就跟着没了。若不补回来,凡是**编译期直接 `import tools.jackson.*`** 的第三方组件都会踩雷:轻则条件不命中静默降级,重则 `NoClassDefFoundError: tools/jackson/databind/ObjectMapper` 打断启动。Boot 单体不受影响(这些组件只存在于 Cloud 技术栈),Cloud 侧实测清单:
+
+| 组件 | 触发点 | 缺席后果 |
+|---|---|---|
+| `spring-cloud-circuitbreaker-sentinel` | `CircuitBreakerRuleChangeListener#afterSingletonsInstantiated` → `SentinelFeignClientProperties#copy()` 内 `new tools.jackson.databind.ObjectMapper()` | **容器 refresh 末尾抛错,服务起不来**;所有单例都建完了才炸,日志看着像启动成功 |
+| `spring-cloud-gateway-server-webflux` | `RemoveJsonAttributesResponseBodyGatewayFilterFactory` 的实例字段 `private ObjectMapper mapper = new ObjectMapper()`,该 Bean 由 `@ConditionalOnEnabledFilter` 默认开启 | **网关起不来** |
+| `spring-cloud-openfeign-core` | `PageJacksonModule` / `SortJacksonModule`,装配条件校验的模块基类在 Jackson 3 改名后退化为恒成立 | **容器启动失败**;见 `FeignJacksonEnvPostProcessor` 的兜底 |
+| `spring-boot-admin-client` | `RestClientRegistrationClientConfig#registrationClient` 形参 `ObjectProvider<tools.jackson.databind.json.JsonMapper>` | 配了 `spring.boot.admin.client.url` 才装配,装配即失败 |
+| `spring-cloud-alibaba-sentinel-datasource` | `JsonConverter` / `XmlConverter` | 静默不注册,Sentinel 规则数据源转换能力消失 |
+| `spring-cloud-starter-alibaba-sentinel` | `SentinelAutoConfiguration$SentinelConverterConfiguration` | 自带 `@ConditionalOnClass` 守卫,整块跳过,同上静默降级 |
+
+这些都不属于本工程可修的范围,逐个关开关是打地鼠——上表还只是**当前版本**的快照,三方库一升级又会冒出新的。所以口径是**留库**:
+
+- `blade-core-cloud` 引 `tools.jackson.core:jackson-databind`,覆盖全部微服务(经 `blade-core-boot` 传递)。
+- `blade-gateway` 不含 `blade-core-cloud`,需在自己的 POM 里单独引一份,否则会被上表第二行打挂。
+- 版本由 Boot BOM 托管(`spring-boot-dependencies` 已 import `tools.jackson:jackson-bom`),不必自设版本属性。
+
+留库**不会**翻转管线:§5.5⑤ 已实测 Jackson 3 转换器分支要的是 `@ConditionalOnBean(JsonMapper)`,而该 Bean 只由被剥离的 `spring-boot-jackson` 产出。`FeignJacksonEnvPostProcessor` 也据此加了 `ClassUtils.isPresent("tools.jackson.databind.JacksonModule")` 守卫——Jackson 3 在场就不干预,交回上游条件判定,只在缺席时才给出关闭默认值。
+
+> 排查手法(升级三方库后建议复跑):对依赖树里的 jar 逐个扫常量池,`tools/jackson` 命中即为硬引用嫌疑,再回源码看有没有条件守卫。用 Python 的 `zipfile` 扫,别用 `strings`——macOS 的 `strings` 会把 `.class` 的 `0xCAFEBABE` magic 误判成 Mach-O fat 二进制,扫出空结果。
 
 ### 5.6 Redis pub/sub 容器与 Boot 4.1 新增 `@RedisListener` 自动配置的竞争
 
@@ -652,7 +759,7 @@ import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 
 **⑥ 安全放行(springdoc 路径)**:springdoc UI 与规格端点需匿名可达。框架默认放行清单 `blade-core-secure` 的 `SecureRegistry.defaultExcludePatterns` 已含 `/v3/api-docs/**`、`/swagger-ui/**`、`/swagger-ui.html`(`/swagger-ui/**` 为 UI 静态资源,`/swagger-ui.html` 为跳转入口),下游 servlet 应用继承即可。若应用另有自建放行清单(Boot 单体的 `BladeConfiguration`、Cloud 网关的 `AuthProvider`),须同步补齐这三项,并去掉 `/doc.html`、`/swagger-resources/**` 等 knife4j / springfox 旧路径。
 
-**⑦ 代码生成器模板**:`blade-starter-develop/src/main/resources/templates/controller.java.vm` 里的 `@ApiOperationSupport` import 与注解一并删除——它是 `.vm` 资源,下游按 `*.java` 批量清理的脚本覆盖不到,须单独处理,否则该生成器产出的 Controller 引用已移除的 knife4j 包、编译不过(排序改用 §9⑧ 的 `@ApiOrder`)。删干净后**还须在模板 `@Tag` 上方补一行无参 `@ApiOrder` + 其 import**(`org.springblade.core.swagger.annotation.ApiOrder`),让生成的 Controller 与手写控制器一致带排序(见下「落地约定」);下游 Boot(`src/{main,test}/resources/templates/`)、Cloud(`blade-ops/blade-develop/src/{main,test}/resources/templates/`)的同名模板副本一并补。
+**⑦ 代码生成器模板**:`blade-starter-develop/src/main/resources/templates/controller.java.vm` 里的 `@ApiOperationSupport` import 与注解一并删除——它是 `.vm` 资源,下游按 `*.java` 批量清理的脚本覆盖不到,须单独处理,否则该生成器产出的 Controller 引用已移除的 knife4j 包、编译不过(排序改用 §9⑧ 的 `@ApiOrder`)。删干净后**还须在模板 `@Tag` 上方补一行无参 `@ApiOrder` + 其 import**(`org.springblade.core.swagger.annotation.ApiOrder`),让生成的 Controller 与手写控制器一致带排序(见下「落地约定」);下游 Boot(`src/main/resources/templates/`)、Cloud(`blade-ops/blade-develop/src/main/resources/templates/`)的同名模板副本一并补。`src/test/resources/templates/` 下的旧扁平路径 `.vm` 副本自模板重组为 `api/` 子目录后不再被加载,应直接删除,test 侧仅保留 `code.properties` 作为数据源配置覆盖点。
 
 **⑧ 接口排序:`@ApiOrder`(替代 knife4j 的 `@ApiOperationSupport(order = n)`)**
 
@@ -664,7 +771,7 @@ springdoc / OpenAPI 3 无接口排序原生注解,blade-starter-swagger 新增 `
 
 实现在 `SwaggerAutoConfiguration`:`GlobalOperationCustomizer` 读注解写入 `x-order` 扩展(类级用字节码行号取声明序,反射不保证方法顺序)并记录「tag → 类级序号」;`GlobalOpenApiCustomizer` 按 `x-order` 重排 `paths`、按类级序号重排顶层 `tags`。swagger-ui 仅在两个 sorter 未设时保留 spec 顺序(§9⑤),并须保持 `springdoc.writer-with-order-by-keys` 默认 `false`。
 
-**落地约定(本次统一)**:三工程**每个带 `@Tag` 的控制器**均在 `@Tag` 上方补一行**无参 `@ApiOrder`**(值取默认 `Integer.MAX_VALUE`),方法体只保留 `@Operation`——效果是分组内接口按**源码声明顺序**展示、各 `@Tag` 分组之间因类级序号相等而回落 tag 名字母序;仅当个别接口要打破源码顺序时,才在该方法上补 `@ApiOrder(n)` 精确覆盖。删 knife4j 排序注解(§3.1 / §4.2)后**只删不补**会让接口在 springdoc UI 下按字母序、丢失原有顺序,故「删旧 + 补 `@ApiOrder`」是同一件事的两半。代码生成器模板 `controller.java.vm`(blade-tool `blade-starter-develop` 源模板 + 下游 Boot/Cloud `blade-develop` 的 main/test 副本,共 5 份)同步在 `@Tag` 上方生成 `@ApiOrder`,新生成的 Controller 开箱即带排序。
+**落地约定(本次统一)**:三工程**每个带 `@Tag` 的控制器**均在 `@Tag` 上方补一行**无参 `@ApiOrder`**(值取默认 `Integer.MAX_VALUE`),方法体只保留 `@Operation`——效果是分组内接口按**源码声明顺序**展示、各 `@Tag` 分组之间因类级序号相等而回落 tag 名字母序;仅当个别接口要打破源码顺序时,才在该方法上补 `@ApiOrder(n)` 精确覆盖。删 knife4j 排序注解(§3.1 / §4.2)后**只删不补**会让接口在 springdoc UI 下按字母序、丢失原有顺序,故「删旧 + 补 `@ApiOrder`」是同一件事的两半。代码生成器模板 `controller.java.vm`(blade-tool `blade-starter-develop` 源模板 + 下游 Boot/Cloud `blade-develop` 的 main 副本,共 3 份)同步在 `@Tag` 上方生成 `@ApiOrder`,新生成的 Controller 开箱即带排序。
 
 > 提示:类级 `@ApiOrder(n)` 的 `value` 用作 `@Tag` 分组之间的排序序号(`SwaggerAutoConfiguration#recordTagOrder` 写入、`GlobalOpenApiCustomizer` 据此重排顶层 `tags`);分组内各接口不受此值影响,按源码声明顺序排列。本次全量采用**无参**形式,`value` 恒为默认值、各分组落 tag 名字母序;如需固定分组顺序,给对应控制器标 `@ApiOrder(n)` 即可。
 
