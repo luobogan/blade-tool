@@ -41,6 +41,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class RequestLogAspect {
 
 	/**
+	 * 无法转为 Map 的 body 默认参数名
+	 */
+	private static final String DEFAULT_BODY_NAME = "requestBody";
+
+	/**
 	 * AOP 环切 控制器 R 返回值
 	 *
 	 * @param point JoinPoint
@@ -71,12 +76,20 @@ public class RequestLogAspect {
 			Object value = args[i];
 			// 如果是body的json则是对象
 			if (requestBody != null && value != null) {
-				paraMap.putAll(BeanUtil.toMap(value));
+				Map<String, Object> bodyMap = toBodyMap(value);
+				// 顶层数组、字符串、基本类型等无法转 Map 时降级为按参数名记录原始值，
+				// 避免"记日志"抛异常反过来中断业务请求
+				if (bodyMap == null) {
+					paraMap.put(StringUtil.isBlank(parameterName) ? DEFAULT_BODY_NAME : parameterName, value);
+				} else {
+					paraMap.putAll(bodyMap);
+				}
 				continue;
 			}
-			// 处理 List
+			// 处理 List（空 List 直接 get(0) 会抛 IndexOutOfBoundsException 并中断请求，先判空）
 			if (value instanceof List) {
-				value = ((List) value).get(0);
+				List<?> valueList = (List<?>) value;
+				value = valueList.isEmpty() ? null : valueList.get(0);
 			}
 			// 处理 参数
 			if (value instanceof HttpServletRequest) {
@@ -168,6 +181,26 @@ public class RequestLogAspect {
 			afterReqArgs.add(tookMs);
 			afterReqLog.append("=================  Response End   ================\n");
 			log.info(afterReqLog.toString(), afterReqArgs.toArray());
+		}
+	}
+
+	/**
+	 * 将 @RequestBody 参数转为 Map，无法转换时返回 null
+	 *
+	 * <p>顶层为数组（List/[]）或字符串、基本类型时，{@link BeanUtil#toMap(Object)}
+	 * 会因 Jackson convertValue 无法转成 Map 而抛异常，进而中断整个请求。</p>
+	 *
+	 * @param value body 参数值
+	 * @return {Map} 转换失败返回 null
+	 */
+	private static Map<String, Object> toBodyMap(Object value) {
+		if (value instanceof List || value.getClass().isArray()) {
+			return null;
+		}
+		try {
+			return BeanUtil.toMap(value);
+		} catch (Exception e) {
+			return null;
 		}
 	}
 
