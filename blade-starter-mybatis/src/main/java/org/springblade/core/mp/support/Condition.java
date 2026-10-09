@@ -74,7 +74,8 @@ public class Condition {
 	 */
 	public static <T> QueryWrapper<T> getQueryWrapper(Map<String, Object> query, Class<T> clazz) {
 		Kv exclude = Kv.init().set(TokenConstant.HEADER, TokenConstant.HEADER)
-			.set("current", "current").set("size", "size").set("ascs", "ascs").set("descs", "descs");
+			.set("current", "current").set("size", "size").set("pageSize", "pageSize")
+			.set("ascs", "ascs").set("descs", "descs");
 		return getQueryWrapper(query, exclude, clazz);
 	}
 

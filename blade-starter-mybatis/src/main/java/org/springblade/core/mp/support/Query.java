@@ -44,6 +44,12 @@ public class Query {
 	private Integer size;
 
 	/**
+	 * 每页的数量（兼容 antd ProTable 的 pageSize 参数；与 size 等价，二者同时存在时优先 pageSize）
+	 */
+	@Schema(description = "每页的数量（兼容 pageSize）")
+	private Integer pageSize;
+
+	/**
 	 * 排序的字段名
 	 */
 	@Schema(accessMode = READ_ONLY)
@@ -54,5 +60,12 @@ public class Query {
 	 */
 	@Schema(accessMode = READ_ONLY)
 	private String descs;
+
+	/**
+	 * 统一分页取值：优先 pageSize（ProTable 约定），回落 size（Blade 约定）
+	 */
+	public Integer getSize() {
+		return pageSize != null ? pageSize : size;
+	}
 
 }
