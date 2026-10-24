@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.springblade.core.tool.jackson.BladeJacksonProperties;
 import org.springblade.core.tool.jackson.BladeJavaTimeModule;
+import org.springblade.core.tool.jackson.BladeNumberModule;
 import org.springblade.core.tool.jackson.BladeViewAnnotationIntrospector;
 import org.springblade.core.tool.utils.DateUtil;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -64,7 +65,9 @@ public class JacksonConfiguration {
 			builder.locale(Locale.CHINA);
 			builder.timeZone(TimeZone.getTimeZone(ZoneId.systemDefault()));
 			builder.dateFormat(new SimpleDateFormat(DateUtil.PATTERN_DATETIME, Locale.CHINA));
-			builder.modulesToInstall(new BladeJavaTimeModule());
+			// BladeNumberModule：超出 JS 安全整数(2^53)的 Long/BigInteger 序列化为字符串，避免前端精度丢失；
+			// 小数值(如 fileSize、version)仍按数字输出，不影响原有逻辑
+			builder.modulesToInstall(new BladeJavaTimeModule(), BladeNumberModule.INSTANCE);
 			builder.findModulesViaServiceLoader(true);
 			// 视图注解内省器，让 Jackson 识别 @BladeView
 			builder.annotationIntrospector(introspector -> new BladeViewAnnotationIntrospector());
