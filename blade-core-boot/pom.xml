@@ -71,6 +71,12 @@
             <groupId>org.springblade</groupId>
             <artifactId>blade-starter-redis</artifactId>
         </dependency>
+        <!-- 对象存储（七牛/阿里/MinIO/腾讯COS）：通用上传组件的 OSS 通道；
+             未配置 oss.name 时不注册任何 OssTemplate Bean，功能自动降级为本地存储 -->
+        <dependency>
+            <groupId>org.springblade</groupId>
+            <artifactId>blade-starter-oss</artifactId>
+        </dependency>
         <!--MyBatis-->
         <dependency>
             <groupId>org.springblade</groupId>

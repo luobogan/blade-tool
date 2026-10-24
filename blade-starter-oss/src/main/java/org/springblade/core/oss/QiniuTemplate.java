@@ -18,6 +18,7 @@ package org.springblade.core.oss;
 import com.qiniu.storage.BucketManager;
 import com.qiniu.storage.UploadManager;
 import com.qiniu.storage.model.FileInfo;
+import com.qiniu.storage.model.FileListing;
 import com.qiniu.util.Auth;
 import lombok.AllArgsConstructor;
 import lombok.SneakyThrows;
@@ -32,6 +33,8 @@ import org.springblade.core.tool.utils.StringUtil;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 
@@ -225,6 +228,60 @@ public class QiniuTemplate implements OssTemplate {
 	@SneakyThrows
 	public void removeFiles(String bucketName, List<String> fileNames) {
 		fileNames.forEach(fileName -> removeFile(bucketName, fileName));
+	}
+
+	/**
+	 * 列出存储空间下的文件（按前缀过滤）
+	 *
+	 * @param prefix 文件名前缀，为空则列出全部
+	 * @return 文件清单
+	 */
+	@SneakyThrows
+	public List<OssFile> listFiles(String prefix) {
+		String bucket = getBucketName();
+		List<OssFile> list = new ArrayList<>();
+		String marker = null;
+		do {
+			FileListing listing = bucketManager.listFiles(bucket, prefix, null, 100, marker);
+			if (listing == null || listing.items == null) {
+				break;
+			}
+			for (FileInfo item : listing.items) {
+				if (item == null || item.key == null) {
+					continue;
+				}
+				OssFile ossFile = new OssFile();
+				ossFile.setName(item.key);
+				ossFile.setLink(fileLink(item.key));
+				ossFile.setHash(item.hash);
+				ossFile.setLength(item.fsize);
+				ossFile.setPutTime(new Date(item.putTime / 10000));
+				ossFile.setContentType(item.mimeType);
+				list.add(ossFile);
+			}
+			marker = listing.marker;
+		} while (marker != null && !marker.isEmpty());
+		return list;
+	}
+
+	/**
+	 * 获取默认存储空间名称（公开给 OssEndpoint 展示用）
+	 *
+	 * @return String 存储空间名称
+	 */
+	public String getCurrentBucketName() {
+		return getBucketName(ossProperties.getBucketName());
+	}
+
+	/**
+	 * 列出全部存储空间（存储桶）
+	 *
+	 * @return 存储桶名称列表
+	 */
+	@SneakyThrows
+	public List<String> listBuckets() {
+		String[] buckets = bucketManager.buckets();
+		return buckets == null ? new ArrayList<>() : Arrays.asList(buckets);
 	}
 
 	/**

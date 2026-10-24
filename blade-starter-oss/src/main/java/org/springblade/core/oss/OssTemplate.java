@@ -198,5 +198,14 @@ public interface OssTemplate {
 	 */
 	void removeFiles(String bucketName, List<String> fileNames);
 
+	/**
+	 * 列出存储空间下的文件（按前缀过滤，仅部分模板实现，默认返回空列表）
+	 *
+	 * @param prefix 文件名前缀，为空则列出全部
+	 * @return 文件清单
+	 */
+	default List<OssFile> listFiles(String prefix) {
+		return new java.util.ArrayList<>();
+	}
 
 }

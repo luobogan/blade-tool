@@ -3,3 +3,4 @@ org.springblade.core.boot.config.RetryConfiguration
 org.springblade.core.boot.config.BladeWebMvcConfiguration
 org.springblade.core.boot.config.BladeBootAutoConfiguration
 org.springblade.core.boot.file.BladeFileAutoConfiguration
+org.springblade.core.boot.file.config.FileStorageAutoConfiguration

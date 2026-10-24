@@ -59,8 +59,12 @@ public class AESCoder {
 	 * @param code       密码
 	 */
 	public static void encryptFile(String inputPath, String outputPath, String code) {
+		// 原地加密（入参与出参同路径）时，FileOutputStream 会先截断文件导致内容丢失，
+		// 故先写临时文件再原子替换。
+		boolean inPlace = inputPath != null && inputPath.equals(outputPath);
+		String realOutput = inPlace ? inputPath + ".enc" : outputPath;
 		try (FileInputStream fis = new FileInputStream(inputPath);
-			 FileOutputStream fos = new FileOutputStream(outputPath)) {
+			 FileOutputStream fos = new FileOutputStream(realOutput)) {
 			OutputStream encryptOut = encrypt(fos, code);
 			byte[] buffer = new byte[1024];
 			int len;
@@ -69,6 +73,16 @@ public class AESCoder {
 			}
 			encryptOut.flush();
 			encryptOut.close();
+			if (inPlace) {
+				File src = new File(realOutput);
+				File dst = new File(inputPath);
+				if (dst.exists() && !dst.delete()) {
+					log.warn("删除原文件失败: {}", inputPath);
+				}
+				if (!src.renameTo(dst)) {
+					log.error("加密文件替换失败: {}", inputPath);
+				}
+			}
 		} catch (Exception e) {
 			log.error("加密文件失败: {}", inputPath, e);
 		}
@@ -82,8 +96,11 @@ public class AESCoder {
 	 * @param code       密码
 	 */
 	public static void decryptFile(String inputPath, String outputPath, String code) {
+		// 原地解密（入参与出参同路径）同样需要临时文件中转
+		boolean inPlace = inputPath != null && inputPath.equals(outputPath);
+		String realOutput = inPlace ? inputPath + ".dec" : outputPath;
 		try (FileInputStream fis = new FileInputStream(inputPath);
-			 FileOutputStream fos = new FileOutputStream(outputPath)) {
+			 FileOutputStream fos = new FileOutputStream(realOutput)) {
 			InputStream decryptIn = decrypt(fis, code);
 			byte[] buffer = new byte[1024];
 			int len;
@@ -91,6 +108,16 @@ public class AESCoder {
 				fos.write(buffer, 0, len);
 			}
 			decryptIn.close();
+			if (inPlace) {
+				File src = new File(realOutput);
+				File dst = new File(inputPath);
+				if (dst.exists() && !dst.delete()) {
+					log.warn("删除原文件失败: {}", inputPath);
+				}
+				if (!src.renameTo(dst)) {
+					log.error("解密文件替换失败: {}", inputPath);
+				}
+			}
 		} catch (Exception e) {
 			log.error("解密文件失败: {}", inputPath, e);
 		}
