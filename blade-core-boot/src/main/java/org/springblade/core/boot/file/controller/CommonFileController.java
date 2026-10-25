@@ -68,7 +68,17 @@ public class CommonFileController {
 	@GetMapping("/download/{fileId}")
 	@Operation(summary = "下载文件", description = "自动解密与解 ZIP，返回原始文件内容")
 	public ResponseEntity<byte[]> download(@PathVariable Long fileId) {
-		FileDownloadContent content = fileStorageService.download(fileId);
+		// 文件已被删除（元数据不存在）应返回 404，而不是抛异常变成 500
+		if (fileStorageService.metadata(fileId).isEmpty()) {
+			return ResponseEntity.notFound().build();
+		}
+		FileDownloadContent content;
+		try {
+			content = fileStorageService.download(fileId);
+		} catch (IllegalArgumentException e) {
+			// 元数据在但物理文件已不在（存储层报「文件不存在」）→ 404
+			return ResponseEntity.notFound().build();
+		}
 		String filename = content.getFilename() == null ? ("file-" + fileId) : content.getFilename();
 		MediaType mediaType;
 		try {
